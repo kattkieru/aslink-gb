@@ -1,0 +1,796 @@
+\documentclass[10pt]{article}
+  \usepackage{color}
+  \usepackage{graphicx}
+  \usepackage{ifpdf}
+  \ifpdf
+     \DeclareGraphicsRule{*}{mps}{*}{}
+  \fi
+  \usepackage{listings}
+  \usepackage{fancyhdr}
+
+%========================================
+
+\newcommand{\centeredExternalPicture}[2][]{%
+  \begin{center}
+    \includegraphics[#1]{figures/#2}%
+  \end{center}
+}
+
+\newcommand{\code}[1]{{\lstset{basicstyle=\normalsize\ttfamily}\lstinline!#1!}}
+
+\newcommand{\dependencyFigure}[3]{%
+  % #1: number of figure
+  % #2: lowercase module name
+  % #3: capitalized module name
+  \generalDependencyFigure{#1}{figure:module_dependency_#2}%
+                              {Module Dependencies of ``#3'' Module}
+}
+
+\newcommand{\definition}[1]{\emph{#1}}
+
+\newenvironment{documentation}{\vspace*{-\medskipamount}%
+                               \begin{list}{\topsep 0mm}%
+                               \item\relax\small\selectDocuFont}%
+                              {\end{list}\smallskip}
+
+\newcommand{\externalPicture}[2][]{%
+   \includegraphics[#1]{figures/#2}%
+}
+
+\newcommand{\gbar}{\vrule{} }
+
+\newcommand{\generalDependencyFigure}[3]{%
+  % #1: number of figure
+  % #2: label
+  % #3: caption
+  \begin{figure}[th]
+    \centeredExternalPicture[width=\textwidth]{linkerFigures-#1.mps}
+    \caption{#3}
+    \label{#2}
+  \end{figure}
+}
+
+\newenvironment{grammar}{\begin{tabular}{rcp{8cm}}}
+                        {\end{tabular}}
+
+\newcommand{\identifier}[1]{\texttt{#1}}
+
+\newenvironment{moduleHeader}{\bgroup \setlength{\parindent}{0pt}
+                              \setlength{\parskip}{5pt}\selectDocuFont}%
+                             {\egroup~\\}
+
+\newcommand{\moduleRef}[1]{\ref{module:#1}}
+\newcommand{\moduleStart}[1]{\subsubsection{Module ``#1''}\label{module:#1}}
+
+\newenvironment{optionList}{\begin{center}\begin{tabular}{p{4cm}p{8cm}}}%
+                           {\end{tabular}\end{center}}
+
+\newcommand{\selectCodeFont}{\fontfamily{cmr}\selectfont\small}
+\newcommand{\selectDocuFont}{\fontfamily{cmr}\fontshape{sl}
+                             \selectfont\small}
+
+\newcommand{\url}[1]{\texttt{\color{blue}#1}}
+
+%========================================
+\pagestyle{fancy}
+%
+% head- and footlines
+%
+  \fancyhead[LE,RO]{\rightmark}
+  \chead{}
+  \fancyhead[LO,RE]{Revised Linker Documentation}
+  \fancyfoot[LO,RE]{Dr.~Thomas Tensi}
+  \cfoot{2009-10-08}
+  \fancyfoot[LE,RO]{\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+  \addtolength{\headheight}{\baselineskip}
+%
+
+%############################################################
+\begin{document}
+\lstdefinelanguage[TT]{C}[ANSI]{C}{%
+                  morekeywords={define,in,include,inout,out,readonly}%
+                  %
+                  }
+\lstset{language=[TT]C,basicstyle=\selectCodeFont,
+        keywordstyle=\bfseries, columns=[c]spaceflexible,
+        aboveskip=\medskipamount, belowskip=0pt}
+
+\title{Technical Documentation for the Revised ASxxxx Linker}
+\author{Dr.~Thomas Tensi}
+\date{2009-10-08}
+\maketitle
+
+%=====================
+\section{Introduction}
+%=====================
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+
+\subsection{Overview}
+
+This program is a completely renovated version of the linker from the
+8-bit-assembler suite ASxxxx from Alan Baldwin.  Parts of this
+documentation are based on his suite documentation \cite{Baldwin09}.
+
+The main idea was to modularize the program towards a
+plugin-architecture.  All target platforms supported provide several
+routines which are called by the linking framework.  Platform specific
+code should only go into those modules; platform-independent code
+should go into the general framework.
+
+Apart from some syntactical improvements and data structure
+enhancements the main contribution of this linker is the support for
+bankswitching at link time.  The SDCC compiler has provided
+bankswitching support for several platforms at compile time, but this
+proves to be too unflexible in practice.  Take a library module for
+example: it may go to several banks depending on the bank layout of
+the calling program.
+
+The renovated linker uses a configuration file which tells the bank
+number for each module.  The linker puts the modules in the
+appropriate banks and also takes care that interbank calls are
+correctly handled.
+
+%=====================
+\section{Usage}
+%=====================
+
+The linker is a command line program with the following syntax and
+options:
+
+\begin{verbatim}
+  aslink [-i] [-s] [-m] [-u] [-x] [-d] [-q] [-b area = value] 
+         [-g symbol = value] [-k path] [-l file]
+         file ...
+\end{verbatim}
+
+%----------------------------------------
+\subsection{Platform Independent Options}
+%----------------------------------------
+
+The following options are supported:
+
+\begin{optionList}
+  file \dots&list of files  to  be linked
+\end{optionList}
+
+\paragraph{General Options:}
+  \begin{optionList}
+    -b area = expression & specifies an area base address via an
+                           expression which may contain constants
+                           and/or defined symbols from the linked
+                           files (not yet supported)\\
+
+    -g symbol = expression & specifies value for the symbol via an
+                             expression which may contain constants
+                             and/or defined symbols from the linked
+                             files
+  \end{optionList}
+
+
+\paragraph{Library File Options:}
+  \begin{optionList}
+    -k path & specifies a library directory prefix path; this will
+              later be combined with a relative library path to find
+              complete library path names\\
+
+    -l file & specifies the relative or complete path of a library
+              file; when a relative path is given, the absolute path
+              is found by combination with some library directory
+              prefix path
+  \end{optionList}
+
+Note that more than one path and also multiple library files are allowed.
+
+
+\paragraph{Output Format Options:}
+  \begin{optionList}
+    -i & linker output is in Intel hex format (to \code{file.ihx})\\
+    -s & linker output is in Motorola S19 format (to \code{file.s19})
+  \end{optionList}
+
+Note that output format options are cumulative; it is possible to have
+the output in more than one format.
+
+
+\paragraph{Map and List File Options:}
+  \begin{optionList}
+    -m & generate a map file into \code{file.map} containing a list of
+         symbols (grouped by area) with relocated addresses, sizes of
+         linked areas, and other linking data\\
+
+    -u & update all available listing files \code{file.lst} into
+         \code{file.rst} by replacing relocatable bytes by their
+         correct absolute values\\
+
+    -x & use a hexadecimal number radix for the map file\\
+    -d & use a decimal number radix for the map file\\
+    -q & use an octal number radix for the map file
+  \end{optionList}
+
+
+%---------------------------------------------------
+\subsection{Specific Options for Z80/GBZ80 Platform}
+%---------------------------------------------------
+  \begin{optionList}
+    -j              & generate a map file into \code{file.sym} in a form
+                      suitable for the debugger within the NO\$GMB Gameboy
+                      emulator\\
+
+    -yo number      & set count of ROM banks to \code{number} (default is 2)\\
+
+    -ya number      & set count of RAM banks to \code{number} (default is 0)\\
+
+    -yt number      & set cartridge MBC type to \code{number} (default is
+                      no MBC)\\
+
+    -yn name        & set name of program to \code{name} (default is the
+                      name of output file truncated to eight characters)\\
+
+    -yp addr = byte & set byte in the output executable file at
+                      address \code{addr} to \code{byte}\\
+
+    -z              & produce a Gameboy image as file (with extension
+                      \code{.gb})
+  \end{optionList}
+
+
+
+%=====================
+\section{Processing}
+%=====================
+
+The linker gathers all command line files and processes them in the
+order presented in two passes.
+
+In the first pass all modules, areas and symbols definitions and
+references are collected.  For each referenced but undefined symbol
+all library files are searched and ---~when they contain such a
+symbol~--- are added to the object file list.  This process continues
+until no more references can be satisfied.  The library files are
+found by doing a combination of prefix paths and relative paths of the
+library files.
+
+Finally area and symbol address definitions from the commandline are
+added to the internal symbol table.
+
+When banking is used another step has to happen in pass 1: the banking
+module of the linker checks for \emph{interbank calls}.  Those
+interbank calls go from code in one bank to code in another parallel
+bank.  Those calls cannot happen directly, because during the call the
+banks have to be switched and also the bank switch upon return from
+the callee has to be organized.  For those interbank calls the linker
+introduces trampoline code which does the above steps.  Because
+banking also needs library modules another search of the libraries has
+to be done.
+
+Note that at the end of the first pass it is clear what object files
+and libraries are needed for the executable and which symbols are
+available.  It is not yet clear where the areas and symbols are
+located.
+
+In the second pass all areas are located in the address space.  This
+location is done based on the area type which is one of ABS, CON, REL,
+OVR or PAG as follows:
+
+\begin{itemize}
+  \item Absolute areas (ABS) have a specific address either assembled
+        in or given by the \code{-b} option on the linker command
+        line.  They are always put to the address given and are not
+        relocated.
+
+  \item Relative areas (REL) have a base address of \code{0x0000}
+        assembled in.  The real start address is either given by a
+        \code{-b} option on the linker command line or is defined for
+        the platform.
+
+        All subsequent relative areas are concatenated to proceeding
+        relative areas in an order defined by the first linker input
+        file.
+\end{itemize}
+
+When all areas have been located, their addresses and those of the
+contained symbols have been completely defined.
+
+Several checks are done for sanity of the output executable: The
+linker e.g. checks whether paged areas (type PAG) are on a 256 byte
+boundary and have a length less than or equal to 256 bytes.  Also
+referenced but undefined symbols or inconsistent constants'
+definitions are reported.
+
+As the main result of linking the output executable is now generated.
+The executable format is either one of the standard formats HEX or
+S-records or even a platform-specific format (like the Gameboy load
+format).  The linker can even produce several output formats in
+parallel.
+
+In addition to the output executables, two more kinds of output can be
+produced:
+
+\begin{itemize}
+  \item A \emph{linking map file} provides detailed information about
+        symbol addresses, areas, modules, libraries and errors during
+        linking.
+
+  \item The \emph{updated listing files} are generated from original
+        assembler listings (.lst-files).  For each of those files a
+        companion file is produced which has all addresses and data
+        relocated to their final values.
+\end{itemize}
+
+
+%==============================
+\section{Banking Caveats}
+%==============================
+
+As mentioned before the linker takes care of transforming
+interbank-calls appropriately.  Nevertheless there are some topics
+which cannot be correctly handled when an architecture does not use
+extended addresses for pointers.  This, for example, applies to the
+GBZ80, which only has 16-bit pointers:
+
+\begin{itemize}
+  \item an indirect call via a function pointer to a function in
+        another bank, and
+
+  \item pointer parameters pointing to another bank.
+\end{itemize}
+
+Note that the latter problem can be hard to track down: Take as an
+example a constant string (which is normally located in the bank of
+its compilation unit) and have its pointer passed to some routine as a
+parameter.  When that routine is located in another bank or passes
+that parameter directly or indirectly to a routine in another bank,
+the access to the string will fail.
+
+There are two remedies for that: either tag those constant strings as
+nonbanked ---~which is non-standard and uses up space in the nonbanked
+area~--- or copy those constants to nonbanked RAM --~which is tedious
+and redundant~---.  Unfortunately in all cases the fact that banking
+occurs is visible to the programmer.
+
+
+%==============================
+\section{Architecture Overview}
+%==============================
+
+Similar to the original structure of Alan Baldwin's program the
+revised linker is organized in several modules according to the
+building blocks of the object files.
+
+In the revised linker I have tried to abstract as much as possible
+from concrete underlying implementation structures (like linked lists)
+but provide access to them only via defined module interfaces.  This
+makes the access sometimes a bit clumsier but encapsulates design
+decisions and also allows to optimize data structures centrally.
+
+\generalDependencyFigure{1}{figure:module_overview_main}
+                           {Module Dependencies of ``Main'' Module}
+
+The top level module is the \definition{Main} module which initializes
+and finalizes all other modules.  It scans the commandline and gives
+all files found to the parser for a two-pass analysis.  After the
+first pass undefined symbol references are resolved via the
+\definition{Library} module.
+
+The \definition{Parser} module knows about the syntax of object and
+library files and calls the appropriate build routines from other
+modules in the first pass for symbol allocation and general
+construction of the internal network of related objects.
+
+When banking is used, all interbank calls are modified using stub
+symbols during the first pass (where resulting trampoline calls and
+symbol definitions go into a synthetic object file).
+
+At the end of the first pass the map file is written (if requested)
+using the \definition{MapFile} module.
+
+In the second pass the code is relocated by routines of the
+\definition{CodeSequence} module.  This module feeds the
+\definition{CodeOutput} module which builds some internal
+representations for output of code in several formats.  Note that it
+is possible to have several formats built in parallel (like
+e.g. S-records and Gameboy format).
+
+At the end of the second pass ---~if requested~--- the
+\definition{ListingUpdater} module traverses all available assembler
+listings and inserts the code data gathered by linking.  This module
+is not very clever and heavily relies on the structure of the listing
+files currently provided by the SDCC compiler.
+
+Figure~\ref{figure:module_overview_main} shows all modules of the
+linker and the usage dependencies of main.  In the course of the
+document other usage dependencies will be illustrated where red arrow
+lines show dependencies from interface to another interface and black
+arrow lines show dependencies from implementation to another
+interface.
+
+
+%==========================
+\section{Module Interfaces}
+%==========================
+
+This section defines the module interfaces in detail.  It is directly
+generated from the module include files leaving out implementation
+details exposed there.
+
+All those interfaces follow an object-based approach.  Whenever a
+module implements a type, there are routines to make instances of that
+type and those which manipulate object of that type (the latter have
+an object of the module type as a first parameter).
+
+The naming convention used is as follows:
+\begin{itemize}
+
+  \item All names have the module name as a prefix with single
+        underscore for externally visible names and two underscores
+        for internal names with file scope.
+
+  \item The main type of a module is named \code{Type} (like
+        e.g. \code{List\_Type}).
+
+  \item The constructor routines are called \code{make} or
+        \code{makeXXX}, destructor routines \code{destroy}.
+
+  \item When a module defines an object type with reference-semantics,
+        those references point to private structures with some magic
+        number.  An object pointer can then be checked for validity by
+        a routine \code{isValid}.
+
+  \item If some internal module data must be kept, a module exports
+        routines called \code{initialize} and \code{finalize} for
+        initial setup and final cleanup.  When initialization is done,
+        also finalization must be executed, but a stateless module may
+        have no such routines.
+
+\end{itemize}
+
+
+\generalDependencyFigure{2}{figure:module_overview_globdefs}
+                           {Module Dependencies onto ``Globdefs'' Module}
+
+%-------------------------------------
+\subsection{Global Definitions Module}
+%-------------------------------------
+
+The module \definition{GlobDefs} provides elementary types and
+routines used globally in the program.  E.g., a \code{Boolean} type is
+defined here or the code templates for a very simple assertion
+checking.  Because it is considered to be a globally known module, its
+identifiers are \underbar{not} prefixed with the module name (in
+contrast to the convention given above), but they are considered
+universal.
+
+Figure~\ref{figure:module_overview_globdefs} shows that all modules
+use the GlobDefs module.
+
+\input{globdefs}
+
+
+%------------------------
+\subsection{Base Modules}
+%------------------------
+
+\generalDependencyFigure{3}{figure:module_overview_base}
+                           {Module Dependencies between Base Modules}
+
+Those modules provide elementary services (like e.g. assertion
+checking) or base collection types (like e.g. lists).
+
+\begin{itemize}
+  \item The \definition{Error} module offers services for dealing with
+        errors which are classified into several kinds of criticality
+        and may lead to program abortion in case of fatal errors.
+        Error output normally goes to stderr, but may be redirected to
+        any open output file.
+
+  \item The \definition{File} module offers very simple file routines
+        like opening, closing, reading and writing a file.  For
+        convenience several formatting routines are provided for
+        numerals, strings and C-strings.  The printf-style of C is
+        intentionally not supported.
+
+        For handling embedded information within a file a special
+        convention is introduced: when a file name before the
+        extension ends with `@' and a decimal number \(n\) this tells
+        that the information starts at seek position \(n\).  In the
+        linker this will be needed for object file libraries.
+
+  \item The module \definition{Set} is for set operations and it is
+        implemented based on bitmaps.  It can only handle sets of few
+        integer elements between 0 and 31, but this is okay for our
+        purposes.  It has a value-based semantics so sets can be
+        copied or passed as parameters like scalar types.
+
+  \item The \definition{String} module encapsulates services for
+        strings.  Strings are implemented as pointers to dynamically
+        sized memory areas and those strings can be created, copied,
+        filled from a C-string, searched, subscripted and so on.  Note
+        that strings have a reference-based semantics: directly
+        assigning a string to another leads to an alias.  Therefore
+        the module has an explicit assignment operation which should
+        be used whenever a copy of a string is needed.  The
+        \definition{StringList} module only provides construction and
+        printout of a list of strings; all other services can be taken
+        from the \code{List} module.
+
+  \item The \definition{TypeDescriptor} module is needed by all
+        generic collections (like lists and maps).  A \definition{type
+        descriptor} is a structure that tells how some element in the
+        container is constructed, destroyed, assigned, identified by
+        some key and hashed.  For normal scalar types those operations
+        are trivial, for reference-based types some function pointers
+        have to be stored in the structure.  Whenever such an element
+        is used in a collection container, the container knows how to
+        act when some container element is created, destroyed and so
+        on.  When a routine pointer is \code{NULL}, nothing has to be
+        done.  A special default descriptor defined in the module
+        consists only of NULL pointers and can be used for scalar
+        types (which require no special handling).
+
+  \item The \definition{List} module provides services for generic
+        lists.  Elements can be concatenated to those lists, removed
+        from them, searched for, etc.
+
+        For iteration over a list a \definition{cursor} can be used:
+        it is set on the beginning of a list and gives some current
+        element.  It can be advanced and finally returns \code{NULL}
+        as a signal that no more elements exist.
+
+        A type descriptor for the embedded elements is given upon
+        construction of a list.  Consider e.g. a list of strings: when
+        a string element is deleted from the list, the list should
+        also free the resources of the string to prevent memory leaks.
+
+  \item The \definition{Map} module encapsulates services for generic
+        maps, i.e. partial functions from keys of some type to values
+        of some type.  Those maps have at most one value for some key.
+        As with lists above a type descriptor is needed for keys.  The
+        values in the maps are always considered as non-unique
+        references and require no specific actions e.g. when a
+        key-value-pair is deleted.
+
+        \definition{IntegerMap} is a variant of a map where the values
+        are arbitrary integers.  This implementation variant is
+        necessary to allow 0 as a value.
+
+  \item The \definition{Multimap} module provides generic multimaps,
+        i.e. partial functions from keys of some type to sets of
+        values of some type (you can also interpret them as relations
+        between the two types grouped by the first relation partner).
+        Similar to maps the values are considered reference-based, the
+        key type is specified by a type descriptor upon multimap
+        construction.
+
+\end{itemize}
+
+\input{error}
+\input{file}
+\input{integermap}
+\input{list}
+\input{map}
+\input{multimap}
+\input{set}
+\input{string}
+\input{stringlist}
+\input{typedescriptor}
+
+
+%-----------------------------------
+\subsection{Linker Specific Modules}
+%-----------------------------------
+
+Those modules provide linker-specific services and rely on the base
+modules defined in the previous section.
+
+\begin{itemize}
+
+  \item The module \definition{Area} handles areas and segments.
+        Those are groups of code or data with similar properties like
+        being overlayed or getting assigned to some specific memory
+        location.  Areas are abstract groupw while segments are
+        concrete instances of areas within some object module.
+
+        Normally there is some current area where all symbols and code
+        encountered in a code module is put.
+
+  \item The module \definition{Banking} handles interbank calls by
+        introducing trampoline calls in the nonbanked area.  This
+        requires some trickery by synthesizing an object file.  The
+        mechanism is completely platform-independent, because all
+        specifics are delegated by callbacks to the Target module.
+
+  \item The module \definition{CodeOutput} centralizes the output to
+        the code files.  Several such output streams are available and
+        they may use arbitrary output formats.  Each stream has to be
+        registered upon program startup and uses a platform-dependent
+        code output routine.  When some code sequence has to be put
+        out, CodeOutput dispatches that request to all open output
+        streams.  An example of a platform-specific output routine can
+        be found in the Gameboy module.
+
+  \item The module \definition{CodeSequence} encapsulates code
+        sequences, i.e. byte sequences to be put to some bank at some
+        specific address.  One central routine can apply a list of
+        simple relocations to a given code sequence, where a simple
+        relocation specifies some position in the code sequence, an
+        offset value and some indication on how the value pointed to
+        has to be combined with the offset (e.g. added).
+
+  \item The module \definition{Library} encapsulates services for
+        object file libraries.  Those are searched for in directories
+        and under specific names.  A single routine searches all
+        matching files for symbol definitions matching unresolved
+        symbol references at the end of the first linking pass,
+        resolves those and adds the matching files to the code base
+        and the symbols to the symbol table for further processing.
+
+  \item The module \definition{ListingUpdater} updates assembler
+        listings associated with all link objects files (except for
+        libraries) by inserting relocated code at appropriate places.
+
+  \item The module \definition{MapFile} provides services for
+        generation of map files to give an overview about the object
+        files read, the allocation of symbols and areas and the
+        library files used.
+
+        Several map files can be open at once and each may have a
+        different routine for output.  Those target files and map
+        output routines must be registered at the MapFile module and
+        are then automatically fed.
+
+  \item The module \definition{Module} encapsulates the concept of a
+        ``module''.  A module is a group of code and data areas
+        belonging together and is the root of all related linker
+        objects.  Its associated areas and symbols are accessible via
+        several routines.
+
+  \item The module \definition{Parser} is responsible for analysing
+        tokenized character streams.  Those can be single or list of
+        object files where the parser calls other modules to build up
+        internal object structures.
+
+        A reduced scan for a simple list of symbols encountered is
+        also possible and the analysis of key-value-assignments by
+        equations.
+
+  \item The module \definition{scanner} gathers character streams to
+        tokens.  Those character streams are given as a
+        read-character-routine and the tokens are ---~among others~---
+        identifier, numbers and operators.  As typical for parsing,
+        tokens may be pushed back onto input to allow for some
+        lookahead during parsing.
+
+  \item The module \definition{stringtable} encapsulates two string
+        tables (or string lists) containing the global base address
+        definitions and the global symbol definitions as strings.
+
+  \item The module \definition{symbol} administers symbols with name,
+        associated segment and address.  The internal table also
+        stored whether a symbol has been defined, referenced or both.
+        To assist banking a symbol may be split into a real and a
+        surrogate symbol and finally a list of referenced but
+        undefined symbols may be obtained.
+
+\end{itemize}
+
+\dependencyFigure{4}{area}{Area}
+\input{area}
+\dependencyFigure{5}{banking}{Banking}
+\input{banking}
+\dependencyFigure{6}{codeoutput}{CodeOutput}
+\input{codeoutput}
+\dependencyFigure{7}{codesequence}{CodeSequence}
+\input{codesequence}
+\dependencyFigure{8}{library}{Library}
+\input{library}
+\dependencyFigure{9}{listingupdater}{ListingUpdater}
+\input{listingupdater}
+\dependencyFigure{10}{mapfile}{MapFile}
+\input{mapfile}
+\dependencyFigure{11}{module}{Module}
+\input{module}
+\dependencyFigure{12}{noicemapfile}{NoICEMapFile}
+\input{noicemapfile}
+\dependencyFigure{13}{parser}{Parser}
+\input{parser}
+\dependencyFigure{14}{scanner}{Scanner}
+\input{scanner}
+\dependencyFigure{15}{stringtable}{StringTable}
+\input{stringtable}
+\dependencyFigure{16}{symbol}{Symbol}
+\input{symbol}
+
+%----------------------------
+\subsection{Platform Modules}
+%----------------------------
+
+\dependencyFigure{17}{target}{Target}
+\input{target}
+\dependencyFigure{18}{gameboy}{Gameboy}
+\input{gameboy}
+
+
+%===============================
+\section{Appendix: File Formats}
+%===============================
+
+%-----------------------
+\subsection{Object File}
+%-----------------------
+
+The following EBNF-grammar gives the token structure of an object file
+used as input to the linker.
+
+Tokens are either operators, identifiers, numbers, newlines and
+comments.  White space (like blanks or tabulators) is necessary to
+seperate numbers and identifiers.  Note that a newline is no valid
+whitespace but a token on its own.
+
+\begin{grammar}
+  address&::=&word .\\
+  areaCount&::=&number .\\
+  areaIndex&::=&word .\\
+  areaMode&::=&word .\\
+  areaDefinition&::=&areaLine \{ symbolLine \} \{ codeLine relocLine \} .\\
+  areaLine&::=&\code{'A'} areaName \code{'size'} number \code{'flags'}
+               number newline .\\
+  codeLine&::=&\code{'T'} address \{ number \} newline .\\
+  endiannessChar&::=&\code{'H'} \gbar \code{'L'} .\\
+  headerLine&::=&\code{'H'} areaCount \code{'areas'}
+                 symbolCount \code{'global'} \code{'symbols'} newline .\\
+  moduleLine&::=&\code{'M'} moduleName newline .\\
+  moduleName&::=&identifier .\\
+  \underbar{objectFile}&::=&radixLine headerLine moduleLine
+                            [ optionsLine ] \{~areaDefinition \} .\\
+  optionsLine&::=&\code{'O'}
+                          \{ ( identifier \gbar number \gbar operator ) \}
+                          newline .\\
+  radixChar&::=&\code{'X'} \gbar \code{'D'} \gbar \code{'Q'} .\\
+  radixLine&::=&radixChar endiannessChar newline .\\
+  relocationData&::=&number .\\
+  relocationIndex&::=&number .\\
+  relocationInfo&::=&relocationKind relocationIndex relocationData .\\
+  relocationKind&::=&number .\\
+  relocLine&::=&\code{'R'} areaMode areaIndex \{ relocationInfo \} newline.\\
+  symbolCount&::=&number .\\
+  symbolLine&::=&\code{'S'} identifier
+                 ( \code{'Def'} \gbar \code{'Ref'} ) number newline .\\
+  word&::=&number number .\\
+\end{grammar}
+
+
+%-----------------------
+\subsection{Library File}
+%-----------------------
+
+The following EBNF-grammar gives the token structure of an library file
+used as input to the linker.
+
+Note that the revised linker does \emph{not} support the SDCCLIB
+libraries containing directly embedded and indexed object files.  The
+only files supported are libraries referencing external object files
+by name.
+
+\begin{grammar}
+  fileName&::=&$\ll$string without newline character$\gg$ newline .\\
+  \underbar{libraryFile}&::=&\{ fileName newline \} .\\
+\end{grammar}
+
+
+%===============================
+%\section{References}
+%===============================
+%\renewcommand{\refname}{}
+
+\begin{thebibliography}{Baldwin09}
+  \bibitem[Baldwin09]{Baldwin09}
+    {Alan Baldwin.} \textit{ASxxxx Cross Assemblers.}
+    Kent State University, Kent, Ohio. (2009).
+    \url{http://shop-pdp.kent.edu/ashtml/asxxxx.htm}
+\end{thebibliography}
+
+\end{document}
