@@ -36,7 +36,9 @@ set( SOURCES
 if( UNIX )
 	set( CFLAGS "-O3 -fPIC -mavx -m64 -g -std=c90" )
 else()
-	message( "Unsupported OS" )
+	## I'm going by Dr. Tensi's settings for now
+	set( CFLAGS "/nologo /O2 /Zi /RTC1 /Wall" )
+	set( CFLAGS "${CFLAGS} /wd4100 /wd4255 /wd4267 /wd4296 /wd4305 /wd4306 /wd4820 /wd4996" )
 endif()
 
 add_executable( aslink ${SOURCES} )
