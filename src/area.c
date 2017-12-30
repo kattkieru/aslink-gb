@@ -72,7 +72,7 @@ static Area_Segment Area__currentSegment;
 
 /*--------------------*/
 
-static void Area__destroy (inout Object *object);
+// static void Area__destroy (inout Object *object);
 static Boolean Area__hasKey (in Object listElement, in Object key);
 static Object Area__makeSegment (void);
 static Boolean Area__segmentHasKey (in Object listElement, in Object key);
